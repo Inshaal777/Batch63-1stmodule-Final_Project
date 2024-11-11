@@ -30,47 +30,111 @@ class Product:
 class Inventory:
     def __init__(self, low_stock_threshold=5):
         self.products = {}
+        self.deleted_ids = set()  # Track deleted IDs
         self.low_stock_threshold = low_stock_threshold
         self.load_from_file()
 
-    def add_product(self, product):
+    def add_product(self):
+        print("\nAdd Product Menu")
+        while True:
+            product_id = input("Enter product ID (leave blank for auto-assign, 'back' to cancel): ")
+            if product_id.lower() == 'back':
+                return
+            if not product_id:
+                product_id = self.get_next_available_id()
+
+            if product_id in self.products:
+                print(f"Error: Product ID {product_id} already exists.")
+                return
+            
+            name = input("Enter product name (or 'back' to cancel): ")
+            if name.lower() == 'back': return
+            category = input("Enter product category (or 'back' to cancel): ")
+            if category.lower() == 'back': return
+            price = input("Enter product price (or 'back' to cancel): ")
+            if price.lower() == 'back': return
+            stock_quantity = input("Enter stock quantity (or 'back' to cancel): ")
+            if stock_quantity.lower() == 'back': return
+
+            try:
+                price = float(price)
+                stock_quantity = int(stock_quantity)
+                product = Product(product_id, name, category, price, stock_quantity)
+                self.add_product_to_inventory(product)
+                break
+            except ValueError:
+                print("Invalid input. Please enter correct values.")
+
+    def add_product_to_inventory(self, product):
         if product.product_id in self.products:
-            raise ValueError(f"Error: Product ID {product.product_id} already exists in the inventory.")
+            print(f"Error: Product ID {product.product_id} already exists.")
+            return
         self.products[product.product_id] = product
         print(f"Product added successfully! Details: {product}")
+        self.resequence_product_ids()
         self.save_to_file()
 
-    def update_product(self, product_id, name=None, category=None, price=None, stock_quantity=None):
-        if product_id not in self.products:
-            raise ValueError(f"Error: Product ID {product_id} not found.")
-        
-        product = self.products[product_id]
+    def update_product(self):
+        print("\nUpdate Product Menu")
+        while True:
+            product_id = input("Enter product ID to update (or 'back' to cancel): ")
+            if product_id.lower() == 'back':
+                return
 
-        if stock_quantity is not None:
-            if product.stock_quantity + stock_quantity < self.low_stock_threshold:
-                print(f"Updating stock to {product.stock_quantity + stock_quantity} will bring stock below the threshold of {self.low_stock_threshold}.")
-                confirm = input("Do you want to proceed with this update? (yes/no): ")
-                if confirm.lower() != 'yes':
-                    print("Update canceled.")
-                    return
+            if product_id not in self.products:
+                print(f"Error: Product ID {product_id} not found in inventory.")
+                return
+            
+            name = input("Enter new product name (leave blank to keep unchanged, 'back' to cancel): ") or None
+            if name is None: continue
+            category = input("Enter new product category (leave blank to keep unchanged, 'back' to cancel): ") or None
+            if category is None: continue
+            price = input("Enter new product price (leave blank to keep unchanged, 'back' to cancel): ")
+            if price.lower() == 'back': return
+            stock_quantity = input("Enter new stock quantity (leave blank to keep unchanged, 'back' to cancel): ")
+            if stock_quantity.lower() == 'back': return
+
+            try:
+                price = float(price) if price else None
+                stock_quantity = int(stock_quantity) if stock_quantity else None
+                self.update_product_in_inventory(product_id, name, category, price, stock_quantity)
+                break
+            except ValueError:
+                print("Invalid input. Please enter valid values.")
                 
-            if name is not None:
-                product.name = name
-            if category is not None:
-                product.category = category
-            if price is not None:
-                product.price = price
-            if stock_quantity is not None:
-                product.stock_quantity += stock_quantity
+    def update_product_in_inventory(self, product_id, name, category, price, stock_quantity):
+        product = self.products[product_id]
+        if name is not None:
+            product.name = name
+        if category is not None:
+            product.category = category
+        if price is not None:
+            product.price = price
+        if stock_quantity is not None:
+            product.stock_quantity += stock_quantity
+        print("Product updated successfully.")
+        self.resequence_product_ids()
+        self.save_to_file()
 
-            print("Product updated successfully.")
-            self.save_to_file()
+    def delete_product(self):
+        print("\nDelete Product Menu")
+        while True:
+            product_id = input("Enter product ID to delete (or 'back' to cancel): ")
+            if product_id.lower() == 'back':
+                return
 
-    def delete_product(self, product_id):
-        if product_id not in self.products:
-            raise ValueError(f"Error: Product ID {product_id} not found.")
+            if product_id not in self.products:
+                print(f"Error: Product ID {product_id} not found.")
+                return
+            
+            self.delete_product_from_inventory(product_id)
+            break
+
+    def delete_product_from_inventory(self, product_id):
+        self.deleted_ids.add(product_id)
         del self.products[product_id]
-        print("Product deleted successfully.")
+        print(f"Product ID {product_id} deleted successfully.")
+        self.resequence_product_ids()
         self.save_to_file()
 
     def view_all_products(self):
@@ -82,14 +146,21 @@ class Inventory:
             if product.stock_quantity < self.low_stock_threshold:
                 print(f"*** Low stock alert for {product.name}! ***")
 
-    def check_low_stock(self, product_id, quantity):
-        if product_id in self.products:
-            remaining_stock = self.products[product_id].stock_quantity - quantity
-            if remaining_stock < self.low_stock_threshold:
-                print(f"Warning: Ordering {quantity} of {self.products[product_id].name} will lower stock below threshold!")
-        else:
-            print(f"Error: Product ID {product_id} does not exist in inventory.")
+    def generate_next_product_id(self):
+        existing_ids = sorted(self.products.keys())
+        if not existing_ids:
+            return '001'
+        last_id = existing_ids[-1]
+        next_id = int(last_id) + 1
+        return f"{next_id:03d}"
 
+    def resequence_product_ids(self):
+        sorted_ids = sorted(self.products.keys())
+        for i, product_id in enumerate(sorted_ids, 1):
+            new_id = f"{i:03d}"
+            self.products[product_id].product_id = new_id
+        print("Product IDs have been re-sequenced.")
+    
     def save_to_file(self):
         with open('inventory.json', 'w') as file:
             json.dump([product.to_dict() for product in self.products.values()], file)
@@ -102,6 +173,14 @@ class Inventory:
                     product = Product.from_dict(product_data)
                     self.products[product.product_id] = product
             print("Inventory loaded successfully.")
+
+    def get_next_available_id(self):
+        used_ids = set(self.products.keys()) - self.deleted_ids
+        if not used_ids:
+            return '001'
+        all_ids = set([f"{i:03d}" for i in range(1, len(self.products) + 2)])
+        available_ids = all_ids - used_ids
+        return min(available_ids)
 
 
 class Order:
@@ -122,7 +201,7 @@ class Order:
         product_details = ', '.join([f"{product_id} (Qty: {quantity})" for product_id, quantity in self.products])
         return (f"Order ID: {self.order_id}, User: {self.username}, Products: {product_details}, "
                 f"Total Amount: ${self.total_amount:.2f}")
-    
+
 
 class User:
     def __init__(self, username, password, role):
@@ -142,16 +221,19 @@ class InventoryManagementSystem:
         self.logged_in_user = None
 
     def login(self):
-        username = input("Enter username: ")
-        password = input("Enter password: ")
-        user = self.users.get(username)
-        if user and user.password == password:
-            self.logged_in_user = user
-            print(f"Logged in as {user.username} ({user.role})")
-            return True
-        else:
-            print("Invalid username or password.")
-            return False
+        while True:
+            username = input("Enter username: ")
+            password = input("Enter password: ")
+            user = self.users.get(username)
+            if user and user.password == password:
+                self.logged_in_user = user
+                print(f"Logged in as {user.username} ({user.role})")
+                return True
+            else:
+                print("Invalid username or password.")
+                retry = input("Try again? (yes/no): ").lower()
+                if retry != 'yes':
+                    return False
         
     def logout(self):
         self.logged_in_user = None
@@ -159,14 +241,17 @@ class InventoryManagementSystem:
 
     def run(self):
         while True:
-            if not self.logged_in_user:
-                self.login()
+            if self.logged_in_user is None:
+                if not self.login():
+                    print("Goodbye!")
+                    break
+            self.show_main_menu()
 
-            if self.logged_in_user:
-                if self.logged_in_user.role == "Admin":
-                    self.admin_menu()
-                else:
-                    self.user_menu()
+    def show_main_menu(self):
+        if self.logged_in_user.role == "Admin":
+            self.admin_menu()
+        elif self.logged_in_user.role == "User":
+            self.user_menu()
 
     def admin_menu(self):
         while True:
@@ -181,150 +266,77 @@ class InventoryManagementSystem:
             print("8. Logout")
             print("9. Exit System")
             choice = input("Select an option: ")
-            try: 
-                if choice == '1':
-                    self.add_product()
-                elif choice == '2':
-                    self.update_product()
-                elif choice == '3':
-                    self.delete_product()
-                elif choice == '4':
-                    self.inventory.view_all_products()
-                elif choice == '5':
-                    self.view_orders()
-                elif choice == '6':
-                    self.confirm_order()
-                elif choice == '7':
-                    self.reject_order()
-                elif choice == '8':
-                    self.logout()
-                    break
-                elif choice == '9':
-                    print("Exiting the system...")
-                    exit()  # Exit the program
-                else:
-                    print("Invalid option.")
-            except Exception as e:
-                print(f"Error: {e}")
+
+            if choice == '1':
+                self.inventory.add_product()
+            elif choice == '2':
+                self.inventory.update_product()
+            elif choice == '3':
+                self.inventory.delete_product()
+            elif choice == '4':
+                self.inventory.view_all_products()
+            elif choice == '5':
+                self.view_orders()
+            elif choice == '6':
+                self.confirm_order()
+            elif choice == '7':
+                self.reject_order()
+            elif choice == '8':
+                self.logout()
+                break
+            elif choice == '9':
+                print("Exiting system.")
+                break
 
     def user_menu(self):
         while True:
             print("\nUser Menu")
-            print("1. View All Products")
-            print("2. Place Order")
-            print("3. View Orders")
-            print("4. Logout")
-            print("5. Exit System")
+            print("1. Place Order")
+            print("2. View Orders")
+            print("3. Logout")
+            print("4. Exit System")
             choice = input("Select an option: ")
+
             if choice == '1':
-                self.inventory.view_all_products()
-            elif choice == '2':
                 self.place_order()
-            elif choice == '3':
+            elif choice == '2':
                 self.view_orders()
-            elif choice == '4':
+            elif choice == '3':
                 self.logout()
                 break
-            elif choice == '5':
-                print("Exiting the system...")
-                exit()  # Exit the program
-            else:
-                print("Invalid option.")
-
-    def add_product(self):
-        while True:  # Keep asking until valid input or cancelled
-            try:
-                product_id = input("Enter product ID (or type 'cancel' to exit): ")
-                if product_id.lower() == 'cancel':
-                    print("Action canceled.")
-                    break
-                
-                if product_id in self.inventory.products:
-                    existing_product = self.inventory.products[product_id]
-                    print(f"Error: Product ID {product_id} already exists in the inventory. Details: {existing_product}")
-                    continue  # Stay in the current loop and ask again
-                
-                name = input("Enter product name: ")
-                category = input("Enter product category: ")
-                price = float(input("Enter product price: "))
-                stock_quantity = int(input("Enter stock quantity: "))
-                product = Product(product_id, name, category, price, stock_quantity)
-                self.inventory.add_product(product)
-                break  # Exit after successful addition
-            except ValueError as e:
-                print(f"Error: {e}")
-
-    def update_product(self):
-        while True:  # Keep asking until valid input or cancelled
-            try:
-                product_id = input("Enter product ID to update (or type 'cancel' to exit): ")
-                if product_id.lower() == 'cancel':
-                    print("Action canceled.")
-                    break
-
-                if product_id not in self.inventory.products:
-                    print(f"Error: Product ID {product_id} not found.")
-                    continue  # Stay in the current loop and ask again
-
-                name = input("Enter new product name (or leave blank): ") or None
-                category = input("Enter new product category (or leave blank): ") or None
-                price_input = input("Enter new product price (or leave blank): ")
-                price = float(price_input) if price_input else None
-                stock_quantity_input = input("Enter new stock quantity (or leave blank): ")
-                stock_quantity = int(stock_quantity_input) if stock_quantity_input else None
-                self.inventory.update_product(product_id, name, category, price, stock_quantity)
-                break  # Exit after successful update
-            except ValueError as e:
-                print(f"Error: {e}")
-
-    def delete_product(self):
-        while True:  # Keep asking until valid input or cancelled
-            try:
-                product_id = input("Enter product ID to delete (or type 'cancel' to exit): ")
-                if product_id.lower() == 'cancel':
-                    print("Action canceled.")
-                    break
-
-                self.inventory.delete_product(product_id)
-                break  # Exit after successful deletion
-            except ValueError as e:
-                print(f"Error: {e}")
+            elif choice == '4':
+                print("Exiting system.")
+                break
 
     def place_order(self):
-        if self.logged_in_user:
-            print("Available Products:")
+        print("\nPlace Order Menu")
+        while True:
             self.inventory.view_all_products()
-            products_to_order = []
-            while True:
-                product_id = input("Enter product ID to order (or type 'cancel' to exit): ")
-                if product_id.lower() == 'cancel':
-                    print("Action canceled.")
-                    break
-                
-                if product_id not in self.inventory.products:
-                    print(f"Error: Product ID {product_id} does not exist.")
-                    continue  # Stay in the loop to retry
-                
-                quantity = int(input(f"Enter quantity for {self.inventory.products[product_id].name}: "))
-                self.inventory.check_low_stock(product_id, quantity)
-                products_to_order.append((product_id, quantity))
-                continue_ordering = input("Do you want to add more products? (yes/no): ")
-                if continue_ordering.lower() != 'yes':
-                    break  # Exit when done ordering
-                
-            if products_to_order:
-                print(f"Order placed successfully for products: {products_to_order}")
-                order_id = len(self.orders) + 1
-                order = Order(order_id, self.logged_in_user.username, products_to_order)
-                self.orders.append(order)
+            product_id = input("Enter product ID to order (or 'done' to finish, 'back' to cancel): ")
+            if product_id.lower() == 'back':
+                return
 
-                # Update the inventory stock
-                for product_id, quantity in products_to_order:
+            if product_id.lower() == 'done':
+                print("Order finalized!")
+                break
+
+            quantity = input(f"Enter quantity for product {product_id}: ")
+            if quantity.lower() == 'back':
+                return
+            try:
+                quantity = int(quantity)
+                if product_id in self.inventory.products and self.inventory.products[product_id].stock_quantity >= quantity:
+                    products_to_order = [(product_id, quantity)]
+                    order_id = len(self.orders) + 1
+                    order = Order(order_id, self.logged_in_user.username, products_to_order)
+                    self.orders.append(order)
                     self.inventory.products[product_id].stock_quantity -= quantity
-                self.inventory.save_to_file()
-        else:
-            print("You must be logged in to place an order.")
-
+                    print(f"Order placed successfully! {order}")
+                else:
+                    print("Insufficient stock!")
+            except ValueError:
+                print("Invalid input for quantity.")
+    
     def view_orders(self):
         if not self.orders:
             print("No orders placed.")
@@ -341,17 +353,13 @@ class InventoryManagementSystem:
         for order in self.orders:
             print(order)
 
-        order_id = int(input("Enter the order ID to confirm (or 'cancel' to exit): "))
-        if order_id == 'cancel':
-            print("Action canceled.")
-            return
-
+        order_id = int(input("Enter the order ID to confirm: "))
         for order in self.orders:
             if order.order_id == order_id:
                 print(f"Order {order_id} confirmed!")
                 self.orders.remove(order)
                 return
-            
+
         print("Order ID not found.")
 
     def reject_order(self):
@@ -363,11 +371,7 @@ class InventoryManagementSystem:
         for order in self.orders:
             print(order)
 
-        order_id = int(input("Enter the order ID to reject (or 'cancel' to exit): "))
-        if order_id == 'cancel':
-            print("Action canceled.")
-            return
-
+        order_id = int(input("Enter the order ID to reject: "))
         for order in self.orders:
             if order.order_id == order_id:
                 print(f"Order {order_id} rejected!")
@@ -377,6 +381,7 @@ class InventoryManagementSystem:
                 self.orders.remove(order)
                 self.inventory.save_to_file()
                 return
+
         print("Order ID not found.")
 
 if __name__ == "__main__":
