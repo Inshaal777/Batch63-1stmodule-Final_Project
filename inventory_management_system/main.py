@@ -30,7 +30,7 @@ class Product:
 class Inventory:
     def __init__(self, low_stock_threshold=5):
         self.products = {}
-        self.deleted_ids = set()  # Track deleted IDs
+        self.deleted_ids = set()
         self.low_stock_threshold = low_stock_threshold
         self.load_from_file()
 
