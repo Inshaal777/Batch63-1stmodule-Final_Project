@@ -227,25 +227,14 @@ class InventoryManagementSystem:
             user = self.users.get(username)
             if user and user.password == password:
                 self.logged_in_user = user
-                print(f"Logged in as {user.username} ({user.role})")
-                return True
+                print(f"Welcome, {username}!")
+                break
             else:
-                print("Invalid username or password.")
-                retry = input("Try again? (yes/no): ").lower()
-                if retry != 'yes':
-                    return False
-        
+                print("Invalid credentials. Try again.")
+
     def logout(self):
         self.logged_in_user = None
         print("Logged out successfully.")
-
-    def run(self):
-        while True:
-            if self.logged_in_user is None:
-                if not self.login():
-                    print("Goodbye!")
-                    break
-            self.show_main_menu()
 
     def show_main_menu(self):
         if self.logged_in_user.role == "Admin":
@@ -264,7 +253,6 @@ class InventoryManagementSystem:
             print("6. Confirm Order")
             print("7. Reject Order")
             print("8. Logout")
-            print("9. Exit System")
             choice = input("Select an option: ")
 
             if choice == '1':
@@ -284,17 +272,14 @@ class InventoryManagementSystem:
             elif choice == '8':
                 self.logout()
                 break
-            elif choice == '9':
-                print("Exiting system.")
-                break
 
     def user_menu(self):
         while True:
             print("\nUser Menu")
             print("1. Place Order")
             print("2. View Orders")
-            print("3. Logout")
-            print("4. Exit System")
+            print("3. Remove Order")
+            print("4. Logout")
             choice = input("Select an option: ")
 
             if choice == '1':
@@ -302,14 +287,14 @@ class InventoryManagementSystem:
             elif choice == '2':
                 self.view_orders()
             elif choice == '3':
-                self.logout()
-                break
+                self.remove_order()
             elif choice == '4':
-                print("Exiting system.")
+                self.logout()
                 break
 
     def place_order(self):
         print("\nPlace Order Menu")
+        products_to_order = []
         while True:
             self.inventory.view_all_products()
             product_id = input("Enter product ID to order (or 'done' to finish, 'back' to cancel): ")
@@ -317,6 +302,9 @@ class InventoryManagementSystem:
                 return
 
             if product_id.lower() == 'done':
+                if not products_to_order:
+                    print("You need to add at least one product to the order.")
+                    continue
                 print("Order finalized!")
                 break
 
@@ -326,23 +314,48 @@ class InventoryManagementSystem:
             try:
                 quantity = int(quantity)
                 if product_id in self.inventory.products and self.inventory.products[product_id].stock_quantity >= quantity:
-                    products_to_order = [(product_id, quantity)]
-                    order_id = len(self.orders) + 1
-                    order = Order(order_id, self.logged_in_user.username, products_to_order)
-                    self.orders.append(order)
+                    products_to_order.append((product_id, quantity))
                     self.inventory.products[product_id].stock_quantity -= quantity
-                    print(f"Order placed successfully! {order}")
+                    print(f"Added {quantity} of {product_id} to the order.")
                 else:
                     print("Insufficient stock!")
             except ValueError:
                 print("Invalid input for quantity.")
     
+        if products_to_order:
+            order_id = len(self.orders) + 1
+            order = Order(order_id, self.logged_in_user.username, products_to_order)
+            self.orders.append(order)
+            print(f"Order placed successfully! {order}")
+
     def view_orders(self):
         if not self.orders:
             print("No orders placed.")
             return
         for order in self.orders:
             print(order)
+
+    def remove_order(self):
+        if not self.orders:
+            print("No orders to remove.")
+            return
+        
+        print("\nYour Orders:")
+        for order in self.orders:
+            print(order)
+
+        order_id = int(input("Enter the order ID to remove: "))
+        for order in self.orders:
+            if order.order_id == order_id:
+                print(f"Order {order_id} removed!")
+                for product_id, quantity in order.products:
+                    self.inventory.products[product_id].stock_quantity += quantity
+                    print(f"Stock of {self.inventory.products[product_id].name} restored by {quantity}.")
+                self.orders.remove(order)
+                self.inventory.save_to_file()
+                return
+
+        print("Order ID not found.")
 
     def confirm_order(self):
         if not self.orders:
@@ -383,6 +396,11 @@ class InventoryManagementSystem:
                 return
 
         print("Order ID not found.")
+
+    def run(self):
+        self.login()
+        self.show_main_menu()
+
 
 if __name__ == "__main__":
     ims = InventoryManagementSystem()
